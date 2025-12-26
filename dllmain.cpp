@@ -9,6 +9,14 @@
 
 using namespace std;
 
+float GetPrivateProfileFloat(char* selection, char* varname, char* default_val, char* filename){
+	float to_return;
+	char* returnedString = new char[256];
+	GetPrivateProfileStringA(selection, varname, default_val, returnedString, 256, filename);
+	to_return = atof(returnedString);
+	return to_return;
+}
+
 float __fastcall CFilter__AddVal(int *CFilter, float addval, char *a3){
 	typedef float (__thiscall * CFilter__AddVal)(int* CFilter, float addval, char *a3);
 	return CFilter__AddVal(0x4EAD6E)(CFilter, addval, a3);
@@ -28,26 +36,6 @@ void DisplayConsole(){
 	SetConsoleCP(1251);
 	SetConsoleOutputCP(1251);
 	//cout << "Mod debug window started" << endl;
-}
-
-//void __userpurge Car_V::sub_4FF540(Car_V *a1@<ecx>, double a2@<st0>, float a3, float a4)
-void Car_V__sub_4FF540(int* Car_V, double a2, float a3, float a4){
-	typedef void (* Car_V__sub_4FF540)(int* Car_V, double a2, float a3, float a4);
-	return Car_V__sub_4FF540(0x4FF540)(Car_V, a2, a3, a4);
-}
-
-void Car_V__sub_4FF540_hook(int* Car_V, int EDX, double a2, float a3, float a4){
-	//int* playerVehicle = (int*)*(int*)0x6F6930;
-	//int* playerCarV = (int*)*(int*)((char*)playerVehicle + 0x5460);
-
-	//if (Car_V != playerCarV)
-	//	return Car_V__sub_5008E0(Car_V);
-
-	//double before = a3;
-
-	Car_V__sub_4FF540(Car_V, a2, a3, a4);
-
-	//cout << "b=" << before << " a=" << a3 << endl;
 }
 
 //signed int __cdecl sub_578F70(_DWORD *a1, int a2);
@@ -72,6 +60,7 @@ int clutchAxisID = 1;
 bool invertClutchAxis;
 
 float clutchAxisValue;
+float clutch_interp_v;
 
 int joy_gear_R;
 int joy_gear_N;
@@ -150,15 +139,6 @@ signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 	return result;
 }
 
-int __fastcall sub_530010(int *InputData, int keyID){
-	typedef int (__thiscall * sub_530010)(int *InputData, int keyID);
-	return sub_530010(0x530010)(InputData, keyID);
-}
-
-int GetControlActionState(int keyID){
-	return sub_530010((int*)0x6D1DD8, keyID);
-}
-
 //void __thiscall Car_V::sub_4FF2A0(Car_V *this, float *a2)
 void __fastcall Car_V__sub_4FF2A0(int *Car_V, float *a2){
 	typedef void (__thiscall * Car_V__sub_4FF2A0)(int* Car_V, float *a2);
@@ -169,11 +149,16 @@ float interp(float min, float max, float power){
     return min + power * (max - min);
 }
 
+float prev_clutch = 1.0;
+
 void __fastcall sub_4FF2A0_hook(int *Car_V, int EDX, float *gearboxRPS_ptr){
 	int* playerVehicle = (int*)*(int*)0x6F6930;
 	int* playerCarV = (int*)*(int*)((char*)playerVehicle + 0x5460);
 
-	if (Car_V != playerCarV)
+	//1 - АКПП, 0 - МКПП
+	bool autogear = *(int*)((char*)Car_V + 0x1C14);
+
+	if (Car_V != playerCarV || autogear)
 		return Car_V__sub_4FF2A0(Car_V, gearboxRPS_ptr);
 
 	int* filterEngineTach = (int*)((char*)Car_V + 0x1B50);
@@ -234,12 +219,27 @@ void __fastcall sub_4FF2A0_hook(int *Car_V, int EDX, float *gearboxRPS_ptr){
 	float RPS_neutral = throttle * tach_with_max_power * 3.0;
 	float RPS_gearbox = gearboxRPS;
 
+	//для отладки
+	//if (GetAsyncKeyState(VK_NUMPAD5))
+	//	clutchAxisValue = 0.0;
+	//else
+	//	clutchAxisValue = 1.0;
+
 	*clutch = clutchAxisValue;
 
-	//1 - АКПП, 0 - МКПП
-	bool autogear = *(int*)((char*)Car_V + 0x1C14);
+	//имитация инерции вращения двигателя при нажатии на педаль сцепления
+	if (clutchAxisValue < prev_clutch){
+		*clutch = interp(prev_clutch, clutchAxisValue, clutch_interp_v);
+	}
+	prev_clutch = *clutch;
+	//cout << GetTickCount() << " " << GetTickCount() % 2 << endl;
+
+	//cout << *clutch << " " << prev_clutch << " " << clutchAxisValue << endl;
+
+	//currentGear == 1
+
 	//отключение переключения передач если не выжато сцепление, когда выбрана МКПП
-	if (*clutch > 0.5 && !autogear){
+	if (clutchAxisValue > 0.5 && !autogear){
 		*(int*)((char*)Car_V + 0x1C24) = 0;
 	} else if (!autogear && use_gearbox){
 		//текущая передача
@@ -332,10 +332,11 @@ void ReadSettings(){
 
 	printJoyInfo = GetPrivateProfileIntA("MOD", "printJoyInfo", 0, ".\\KoTR_ClutchMod.ini");
 
-	clutchAxisID     = GetPrivateProfileIntA("CLUTCH", "axisID", 0, ".\\KoTR_ClutchMod.ini") - 1;
-	invertClutchAxis = GetPrivateProfileIntA("CLUTCH", "invert", 0, ".\\KoTR_ClutchMod.ini");
-	clutchAxisMin    = GetPrivateProfileIntA("CLUTCH", "min", 0, ".\\KoTR_ClutchMod.ini");
-	clutchAxisMax    = GetPrivateProfileIntA("CLUTCH", "max", 1000, ".\\KoTR_ClutchMod.ini");
+	clutchAxisID     = GetPrivateProfileIntA ("CLUTCH", "axisID",     0, ".\\KoTR_ClutchMod.ini") - 1;
+	invertClutchAxis = GetPrivateProfileIntA ("CLUTCH", "invert",     0, ".\\KoTR_ClutchMod.ini");
+	clutchAxisMin    = GetPrivateProfileIntA ("CLUTCH", "min",        0, ".\\KoTR_ClutchMod.ini");
+	clutchAxisMax    = GetPrivateProfileIntA ("CLUTCH", "max",     1000, ".\\KoTR_ClutchMod.ini");
+	clutch_interp_v  = GetPrivateProfileFloat("CLUTCH", "interp", "0.3", ".\\KoTR_ClutchMod.ini");
 
 	ruleMaxRotation = GetPrivateProfileIntA("STEERING", "cabSteerMaxDeg", 90, ".\\KoTR_ClutchMod.ini") * 3.14 / 180.0;
 
@@ -378,11 +379,6 @@ void ReadSettings(){
 		cout << "joy_gear_range have too high button index, max 32 supported\n";
 }
 
-//double __thiscall Car_V::sub_4FF6F0(Car_V *this)
-double __fastcall sub_4FF6F0_hook(int *Car_V, int EDX){
-	return 0.0;
-}
-
 void PatchBytes(){
 	//замена адресов переменных для сравнения внутри условий if и т.п.
 	//dbl_64B840 0.2 -> dbl_64B678 0.0 
@@ -418,7 +414,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
 				return TRUE;
 
 			DisplayConsole();
-			cout << "ClutchMod v0.1 (19.12.2025) started. Test version." << endl;
+			cout << "ClutchMod v0.2 (25.12.2025) started." << endl;
 
 			ReadSettings();
 
