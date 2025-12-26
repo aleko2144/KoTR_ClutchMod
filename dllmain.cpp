@@ -78,7 +78,7 @@ bool use_gearbox;
 
 int clutchAxisMin;
 int clutchAxisMax;
-/////
+///// joy info ////
 
 bool joyKeyStates[32];
 
@@ -99,27 +99,30 @@ bool IsJoyKeyJustPressed(int key){
 }
 
 char joyInfoText[256];
+int* menuFont;
 
-//GUI func
+///// 2D UI /////
 void __cdecl DrawText2D(int *surface, int x, int y, int *font, char *text, unsigned int color, int isRealColor){
 	typedef void (__cdecl * DrawText2D)(int *surface, int x, int y, int *font, char *text, unsigned int color, int isRealColor);
 	return DrawText2D(0x5EA110)(surface, x, y, font, text, color, isRealColor);
 }
 
 int *__cdecl LoadFont(char *a1){
-	typedef int* (__cdecl * sub_5E8C00)(char* a1);
-	return sub_5E8C00(0x5E8C00)(a1);
+	typedef int* (__cdecl * LoadFont)(char* a1);
+	return LoadFont(0x5E8C00)(a1);
 }
 
 void drawJoyInfo(){
 	//CWinApp->screenElement->surface
 	int* surface  = (int*)*(int*)((char*)*(int*)0x69686C + 0xC);
-	int* menuFont = LoadFont("menu.fon");
+	if (!menuFont)
+		menuFont = LoadFont("menu.fon");
 
 	//colors: 0 - black, 4 - white, 5 - red (from LOAD.RES->menu_.plm)
 	DrawText2D(surface, 21, 21, menuFont, joyInfoText, 0, 0); //text shadow
 	DrawText2D(surface, 20, 20, menuFont, joyInfoText, 4, 0); //text
 }
+/////
 
 signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 	signed int result = sub_578F70(a1, a2);
@@ -145,7 +148,6 @@ signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 			sprintf(joyInfoText, "%s\nAxes: 1.=%d 2.= %d 3.=%d 4.= %d 5.= %d 6.= %d", joyInfoText, JoyInfo.axes[0], JoyInfo.axes[1], JoyInfo.axes[2], JoyInfo.axes[3], JoyInfo.axes[4], JoyInfo.axes[5], JoyInfo.axes[6]);
 		}
 		
-		//clutchAxisValue = a1[clutchAxisID] / 1000.0; //0...1000
 		clutchAxisValue = (abs(clutchAxisMin) + float(a1[clutchAxisID])) / (abs(clutchAxisMin) + clutchAxisMax);
 
 		if (invertClutchAxis){
@@ -429,7 +431,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL,DWORD fdwReason,LPVOID lpvReserved)
 				return TRUE;
 
 			DisplayConsole();
-			cout << "ClutchMod v0.2 (25.12.2025) started." << endl;
+			cout << "ClutchMod v0.3 (26.12.2025) started." << endl;
 
 			ReadSettings();
 
