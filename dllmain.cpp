@@ -98,6 +98,29 @@ bool IsJoyKeyJustPressed(int key){
 	return false;
 }
 
+char joyInfoText[256];
+
+//GUI func
+void __cdecl DrawText2D(int *surface, int x, int y, int *font, char *text, unsigned int color, int isRealColor){
+	typedef void (__cdecl * DrawText2D)(int *surface, int x, int y, int *font, char *text, unsigned int color, int isRealColor);
+	return DrawText2D(0x5EA110)(surface, x, y, font, text, color, isRealColor);
+}
+
+int *__cdecl LoadFont(char *a1){
+	typedef int* (__cdecl * sub_5E8C00)(char* a1);
+	return sub_5E8C00(0x5E8C00)(a1);
+}
+
+void drawJoyInfo(){
+	//CWinApp->screenElement->surface
+	int* surface  = (int*)*(int*)((char*)*(int*)0x69686C + 0xC);
+	int* menuFont = LoadFont("menu.fon");
+
+	//colors: 0 - black, 4 - white, 5 - red (from LOAD.RES->menu_.plm)
+	DrawText2D(surface, 21, 21, menuFont, joyInfoText, 0, 0); //text shadow
+	DrawText2D(surface, 20, 20, menuFont, joyInfoText, 4, 0); //text
+}
+
 signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 	signed int result = sub_578F70(a1, a2);
 
@@ -117,10 +140,9 @@ signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 			int POVs_cnt    = word_6F3574[0x11C * currentDeviceId];
 			int sliders_cnt = word_6F3576[0x11C * currentDeviceId];
 
-			cout << "Device ID: " << currentDeviceId << endl;
-			cout << "Axes/Buttons/POVs/Sliders: " << axes_cnt << "/" << buttons_cnt << "/" << POVs_cnt << "/" << sliders_cnt << endl;
-			cout << "Axes: " << "1.=" << JoyInfo.axes[0] << " 2.=" << JoyInfo.axes[1] << " 3.=" << JoyInfo.axes[2] << " 4.=" << JoyInfo.axes[3] << " 5.=" << JoyInfo.axes[4] << " 6.=" << JoyInfo.axes[5] << endl;
-			//cout << "Axes: " << a1[0] << " " << a1[1] << " " << a1[2] << " " << a1[3] << " " << a1[4] << " " << a1[5] << endl;
+			sprintf(joyInfoText, "Device ID: %d", currentDeviceId);
+			sprintf(joyInfoText, "%s\nAxes/Buttons/POVs/Sliders: %d/%d/%d/%d", joyInfoText, axes_cnt, buttons_cnt, POVs_cnt, sliders_cnt);
+			sprintf(joyInfoText, "%s\nAxes: 1.=%d 2.= %d 3.=%d 4.= %d 5.= %d 6.= %d", joyInfoText, JoyInfo.axes[0], JoyInfo.axes[1], JoyInfo.axes[2], JoyInfo.axes[3], JoyInfo.axes[4], JoyInfo.axes[5], JoyInfo.axes[6]);
 		}
 		
 		//clutchAxisValue = a1[clutchAxisID] / 1000.0; //0...1000
@@ -131,8 +153,8 @@ signed int __cdecl UpdateDInputDeviceState(int *a1, int a2){
 		}
 
 		if (printJoyInfo){
-			cout << "clutchAxisValue=" << clutchAxisValue << endl;
-			cout << endl;
+			sprintf(joyInfoText, "%s\nclutchAxisValue = %f", joyInfoText, clutchAxisValue);
+			drawJoyInfo();
 		}
 	}
 
@@ -232,16 +254,11 @@ void __fastcall sub_4FF2A0_hook(int *Car_V, int EDX, float *gearboxRPS_ptr){
 		*clutch = interp(prev_clutch, clutchAxisValue, clutch_interp_v);
 	}
 	prev_clutch = *clutch;
-	//cout << GetTickCount() << " " << GetTickCount() % 2 << endl;
 
-	//cout << *clutch << " " << prev_clutch << " " << clutchAxisValue << endl;
-
-	//currentGear == 1
-
-	//отключение переключения передач если не выжато сцепление, когда выбрана МКПП
-	if (clutchAxisValue > 0.5 && !autogear){
+	//отключение переключения передач если не выжато сцепление
+	if (clutchAxisValue > 0.5){
 		*(int*)((char*)Car_V + 0x1C24) = 0;
-	} else if (!autogear && use_gearbox){
+	} else if (use_gearbox){
 		//текущая передача
 		int *gear_current = (int*)((char*)Car_V + 0x1C1C);
 		//передача, которую следует включить - можно поменять значение,
@@ -260,8 +277,6 @@ void __fastcall sub_4FF2A0_hook(int *Car_V, int EDX, float *gearboxRPS_ptr){
 
 		if (IsJoyKeyJustPressed(joy_gear_N))
 			*gear_target = 21;
-
-		//cout << IsJoyKeyJustPressed(joy_gear_N) << endl;
 
 		//диапазон переключения передач
 		int gear_range_add = 0;
